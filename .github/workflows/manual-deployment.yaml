@@ -46,7 +46,6 @@ jobs:
     uses: ./.github/workflows/deploy-api-gateway.yaml
     with:
       environment: ${{ inputs.environment }}
-      aws_account: 149216511563
       spec_file: ${{ inputs.api_specification_file }}
       deploy_stages: ${{ inputs.deploy_stages }}
       create_usage_plans: ${{ inputs.create_usage_plans }}
