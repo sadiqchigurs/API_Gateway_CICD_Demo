@@ -39,7 +39,7 @@ jobs:
         with:
           node-version: ${{ env.NODE_VERSION }}
           cache: 'npm'
-          cache-dependency-path: './aws-cdk-api-gateway/package-lock.json'
+          cache-dependency-path: 'package-lock.json'
 
       - name: Set AWS Region
         id: set-region
@@ -56,15 +56,12 @@ jobs:
           aws-region: ${{ env.AWS_REGION }}
 
       - name: Install AWS CDK
-        working-directory: ./aws-cdk-api-gateway
         run: npm install -g aws-cdk
 
       - name: Build Project
-        working-directory: ./aws-cdk-api-gateway
         run: npm run build
 
       - name: Deploy API Gateway
-        working-directory: ./aws-cdk-api-gateway
         run: |
           echo "Deploying API Gateway to ${{ inputs.environment }}..."          
           cdk deploy ApiGatewayStack \
@@ -76,7 +73,6 @@ jobs:
             --outputs-file cdk-outputs.json
 
       - name: Display API Gateway Details
-        working-directory: ./aws-cdk-api-gateway
         run: |
           if [ -f "cdk-outputs.json" ]; then
             API_GATEWAY_ID=$(cat cdk-outputs.json | jq -r '.ApiGatewayStack.ApiGatewayId // empty')
@@ -92,7 +88,6 @@ jobs:
           fi
 
       - name: Deploy API Gateway Stages
-        working-directory: ./aws-cdk-api-gateway
         if: ${{ inputs.deploy_stages != '' && inputs.deploy_stages != 'none' && inputs.deploy_stages != 'skip' }}
         run: |
           echo "Deploying stages: ${{ inputs.deploy_stages }}"
@@ -137,7 +132,6 @@ jobs:
           fi
 
       - name: Create Usage Plans and API Keys
-        working-directory: ./aws-cdk-api-gateway
         if: ${{ inputs.create_usage_plans == true && inputs.deploy_stages != '' && inputs.deploy_stages != 'none' && inputs.deploy_stages != 'skip' }}
         run: |
           echo "Creating usage plans and API keys..."
