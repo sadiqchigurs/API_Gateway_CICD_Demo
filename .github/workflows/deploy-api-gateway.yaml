@@ -72,6 +72,10 @@ jobs:
           aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
           aws-region: ${{ steps.set-region.outputs.aws_region }}
 
+      - name: Install Dependencies
+        working-directory: ./aws-cdk-api-gateway
+        run: npm install
+
       - name: Install AWS CDK
         run: npm install -g aws-cdk
 
