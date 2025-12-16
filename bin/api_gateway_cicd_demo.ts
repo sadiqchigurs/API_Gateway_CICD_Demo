@@ -1,4 +1,4 @@
-// #!/usr/bin/env node
+#!/usr/bin/env node
 /*
 import * as cdk from 'aws-cdk-lib';
 import { ApiGatewayCicdDemoStacks } from '../lib/api_gateway_cicd_demo-stack';
@@ -100,7 +100,6 @@ new ApiGatewayCicdDemoStack(app, 'ApiGwSharedStack', {
 });
 */
 
-#!/usr/bin/env node
 import 'source-map-support/register';
 import * as cdk from 'aws-cdk-lib';
 import { ApiGatewayCicdDemoStack } from '../lib/api_gateway_cicd_demo-stack';
