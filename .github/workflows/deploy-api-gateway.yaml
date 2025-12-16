@@ -44,9 +44,11 @@ jobs:
       - name: Set AWS Region
         id: set-region
         run: |
-          if [[ "${{ inputs.environment }}" == "develop" || ${{ inputs.environment }}" == "staging" || ${{ inputs.environment }}" == "prod"]]; then
-            echo "aws_region=us-east-2" >> $GITHUB_OUTPUT
-          fi
+            if [[ "${{ inputs.environment }}" == "develop" || \
+                  "${{ inputs.environment }}" == "staging" || \
+                  "${{ inputs.environment }}" == "prod" ]]; then
+              echo "aws_region=us-east-2" >> "$GITHUB_OUTPUT"
+            fi
 
       - name: 🔐 Configure AWS credentials
         uses: aws-actions/configure-aws-credentials@v2
