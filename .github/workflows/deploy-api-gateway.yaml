@@ -1,0 +1,208 @@
+name: Deploy API Gateway
+
+on:
+  workflow_call:
+    inputs:
+        environment:
+            required: true
+            type: string
+            description: 'Target Environment'
+        spec_file:
+            required: true
+            type: string
+            description: 'OpenAPI Specification File'
+        deploy_stages:
+            required: false
+            type: string
+            description: 'Stages to Deploy (comma-separated)'
+        create_usage_plans:
+            required: false
+            type: boolean
+            default: true
+            description: 'Create Usage Plans and API Keys via AWS CLI (true/false)'
+
+env:
+  NODE_VERSION: '18'
+
+jobs:
+  deploy-api-gateway:
+    name: deploy-api-gateway to ${{ inputs.environment }}
+    runs-on: ubuntu-latest
+    environment:
+      name: ${{ inputs.environment }}
+    steps:
+      - name: Checkout Code
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: 'npm'
+          cache-dependency-path: './aws-cdk-api-gateway/package-lock.json'
+
+      - name: Set AWS Region
+        id: set-region
+        run: |
+          if [[ "${{ inputs.environment }}" == "develop" || ${{ inputs.environment }}" == "staging" || ${{ inputs.environment }}" == "nora-prod"]]; then
+            echo "aws_region=us-east-2" >> $GITHUB_OUTPUT
+          fi
+
+      - name: Configure AWS credentials for develop environment
+        if: ${{ inputs.aws_account == '149216511563' }}
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          aws-access-key-id: ${{ secrets.MBL_MS_PREPRD_SKXDIGNPRD_AWS_ACCESS_KEY }}
+          aws-secret-access-key: ${{ secrets.MBL_MS_PREPRD_SKXDIGNPRD_AWS_ACCESS_SECRET }} 
+          aws-region: ${{ steps.set-region.outputs.aws_region }}
+
+      - name: Configure AWS credentials for staging and prod environment
+        if: ${{ inputs.aws_account == '252850564008' }}
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          aws-access-key-id: ${{ secrets.MBL_MS_PRD_SKXDIG_AWS_ACCESS_KEY }}
+          aws-secret-access-key: ${{ secrets.MBL_MS_PRD_SKXDIG_AWS_ACCESS_SECRET }} 
+          aws-region: ${{ steps.set-region.outputs.aws_region }}
+
+      - name: Install AWS CDK
+        working-directory: ./aws-cdk-api-gateway
+        run: npm install -g aws-cdk
+
+      - name: Build Project
+        working-directory: ./aws-cdk-api-gateway
+        run: npm run build
+
+      - name: Deploy API Gateway
+        working-directory: ./aws-cdk-api-gateway
+        run: |
+          echo "Deploying API Gateway to ${{ inputs.environment }}..."
+          
+          cdk deploy ApiGatewayStack \
+            --context specFile=${{ inputs.spec_file }} \
+            --context region=${{ steps.set-region.outputs.aws_region }} \
+            --context deployStages="none" \
+            --context createUsagePlans=${{ inputs.create_usage_plans }} \
+            --require-approval never \
+            --outputs-file cdk-outputs.json
+
+      - name: Display API Gateway Details
+        working-directory: ./aws-cdk-api-gateway
+        run: |
+          if [ -f "cdk-outputs.json" ]; then
+            API_GATEWAY_ID=$(cat cdk-outputs.json | jq -r '.ApiGatewayStack.ApiGatewayId // empty')
+            API_GATEWAY_NAME=$(cat cdk-outputs.json | jq -r '.ApiGatewayStack.ApiGatewayName // empty')
+            
+            echo "API Gateway deployed: $API_GATEWAY_NAME ($API_GATEWAY_ID)"
+            
+            echo "API_GATEWAY_ID=$API_GATEWAY_ID" >> $GITHUB_ENV
+            echo "API_GATEWAY_NAME=$API_GATEWAY_NAME" >> $GITHUB_ENV
+          else
+            echo "CDK outputs file not found"
+            exit 1
+          fi
+
+      - name: Deploy API Gateway Stages
+        working-directory: ./aws-cdk-api-gateway
+        if: ${{ inputs.deploy_stages != '' && inputs.deploy_stages != 'none' && inputs.deploy_stages != 'skip' }}
+        run: |
+          echo "Deploying stages: ${{ inputs.deploy_stages }}"
+          
+          API_ID="${{ env.API_GATEWAY_ID }}"
+          if [ -z "$API_ID" ]; then
+            echo "API Gateway ID not found"
+            exit 1
+          fi
+          
+          IFS=',' read -ra STAGE_ARRAY <<< "${{ inputs.deploy_stages }}"
+          DEPLOYED_STAGES=()
+          
+          for stage in "${STAGE_ARRAY[@]}"; do
+            stage=$(echo "$stage" | xargs)
+            echo "Deploying stage: $stage"
+            
+            DEPLOYMENT_ID=$(aws apigateway create-deployment \
+              --rest-api-id "$API_ID" \
+              --stage-name "$stage" \
+              --stage-description "Deployed via GitHub Actions - $(date '+%Y-%m-%d %H:%M:%S')" \
+              --description "Deployment for $stage stage - $(date '+%Y-%m-%d %H:%M:%S')" \
+              --region ${{ steps.set-region.outputs.aws_region }} \
+              --query 'id' --output text 2>/dev/null)
+            
+            if [ $? -eq 0 ] && [ ! -z "$DEPLOYMENT_ID" ] && [ "$DEPLOYMENT_ID" != "None" ]; then
+              echo "Stage '$stage' deployed successfully"
+              echo "URL: https://$API_ID.execute-api.${{ steps.set-region.outputs.aws_region }}.amazonaws.com/$stage"
+              DEPLOYED_STAGES+=("$stage")
+            else
+              echo "Failed to deploy stage: $stage"
+            fi
+          done
+          
+          if [ ${#DEPLOYED_STAGES[@]} -eq 0 ]; then
+            echo "No stages were deployed successfully"
+            exit 1
+          else
+            echo "Successfully deployed ${#DEPLOYED_STAGES[@]} stage(s): ${DEPLOYED_STAGES[*]}"
+            # Store deployed stages for usage plan creation
+            echo "DEPLOYED_STAGES=${DEPLOYED_STAGES[*]}" >> $GITHUB_ENV
+          fi
+
+      - name: Create Usage Plans and API Keys
+        working-directory: ./aws-cdk-api-gateway
+        if: ${{ inputs.create_usage_plans == true && inputs.deploy_stages != '' && inputs.deploy_stages != 'none' && inputs.deploy_stages != 'skip' }}
+        run: |
+          echo "Creating usage plans and API keys..."
+          
+          # Validate required variables
+          [[ -z "${{ env.API_GATEWAY_ID }}" || -z "${{ env.DEPLOYED_STAGES }}" ]] && {
+            echo "Missing API Gateway ID or deployed stages"
+            exit 1
+          }
+
+          # Process each stage
+          for stage in ${{ env.DEPLOYED_STAGES }}; do
+            echo "Processing stage: $stage"
+            
+            # Create usage plan with quota and throttling
+            USAGE_PLAN_ID=$(aws apigateway create-usage-plan \
+              --name "${{ env.API_GATEWAY_NAME }}-usage-plan-${stage}" \
+              --description "Usage plan for ${stage}" \
+              --api-stages apiId="${{ env.API_GATEWAY_ID }}",stage="$stage" \
+              --throttle rateLimit=5000,burstLimit=10000 \
+              --quota limit=10000,period=DAY \
+              --region ${{ steps.set-region.outputs.aws_region }} \
+              --query 'id' --output text) || continue
+            
+            # Create and associate API key
+            API_KEY_ID=$(aws apigateway create-api-key \
+              --name "${{ env.API_GATEWAY_NAME }}-key-${stage}" \
+              --description "API key for ${stage}" \
+              --enabled \
+              --region ${{ steps.set-region.outputs.aws_region }} \
+              --query 'id' --output text) || continue
+            
+            # Link key to usage plan
+            aws apigateway create-usage-plan-key \
+              --usage-plan-id "$USAGE_PLAN_ID" \
+              --key-id "$API_KEY_ID" \
+              --key-type API_KEY \
+              --region ${{ steps.set-region.outputs.aws_region }} || continue
+            
+            # Get and display key details
+            API_KEY_VALUE=$(aws apigateway get-api-key \
+              --api-key "$API_KEY_ID" \
+              --include-value \
+              --region ${{ steps.set-region.outputs.aws_region }} \
+              --query 'value' --output text)
+            
+            echo "✅ Stage $stage configured successfully:"
+            echo "   Usage Plan ID: $USAGE_PLAN_ID"
+            echo "   API Key ID: $API_KEY_ID"
+            echo "   API Key: $API_KEY_VALUE"
+          done
+          
+          if [ ${#CREATED_USAGE_PLANS[@]} -eq 0 ]; then
+            echo "  No usage plans were created successfully"
+          else
+            echo "  Successfully created usage plans for ${#CREATED_USAGE_PLANS[@]} stage(s): ${CREATED_USAGE_PLANS[*]}"
+          fi
+
