@@ -43,15 +43,11 @@ on:
 
 jobs:
   deploy-api-gateway-intl:
-    uses: ./.github/workflows/deploy-api.yaml
+    uses: ./.github/workflows/deploy-api-gateway.yaml
     with:
       environment: ${{ inputs.environment }}
       aws_account: 149216511563
       spec_file: ${{ inputs.api_specification_file }}
       deploy_stages: ${{ inputs.deploy_stages }}
       create_usage_plans: ${{ inputs.create_usage_plans }}
-    
-    secrets:
-      MBL_MS_PREPRD_SKXDIGNPRD_AWS_ACCESS_KEY: ${{ secrets.MBL_MS_PREPRD_SKXDIGNPRD_AWS_ACCESS_KEY }}
-      MBL_MS_PREPRD_SKXDIGNPRD_AWS_ACCESS_SECRET: ${{ secrets.MBL_MS_PREPRD_SKXDIGNPRD_AWS_ACCESS_SECRET }}
 
