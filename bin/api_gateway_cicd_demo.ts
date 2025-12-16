@@ -1,4 +1,4 @@
-#!/usr/bin/env node
+// #!/usr/bin/env node
 /*
 import * as cdk from 'aws-cdk-lib';
 import { ApiGatewayCicdDemoStacks } from '../lib/api_gateway_cicd_demo-stack';
@@ -89,7 +89,7 @@ new ApiGatewayCicdDemoStack(app, `ApiGwStack-${envName}`, {
 }, envName);
 */
 
-
+/*
 import * as cdk from 'aws-cdk-lib';
 import { ApiGatewayCicdDemoStack } from '../lib/api_gateway_cicd_demo-stack';
 
@@ -98,4 +98,51 @@ const app = new cdk.App();
 new ApiGatewayCicdDemoStack(app, 'ApiGwSharedStack', {
   env: { region: 'us-east-1' }
 });
+*/
+
+#!/usr/bin/env node
+import 'source-map-support/register';
+import * as cdk from 'aws-cdk-lib';
+import { ApiGatewayStack } from '../lib/api-gateway-stack';
+
+const app = new cdk.App();
+
+// Get region from context or use default
+const region = app.node.tryGetContext('region') || 'us-east-1';
+
+// Get spec file from context or use default
+const specFile = app.node.tryGetContext('specFile') || 'api-spec.json';
+
+// Get REST API name from context
+const restApiName = app.node.tryGetContext('restApiName');
+
+// Get stages to deploy from context
+const deployStages = app.node.tryGetContext('deployStages');
+
+console.log(`Deploying with spec file: ${specFile}`);
+if (restApiName) {
+  console.log(`Using custom REST API name: ${restApiName}`);
+}
+
+// Parse stages to deploy
+const stagesToDeploy = deployStages && deployStages !== 'none' ? 
+  deployStages.split(',').map((s: string) => s.trim()) : [];
+
+if (stagesToDeploy.length > 0) {
+  console.log(`Creating stacks for stages: ${stagesToDeploy.join(', ')}`);
+} else {
+  console.log(`Creating API Gateway without stages`);
+}
+
+// Single stack with multiple stages
+new ApiGatewayStack(app, 'ApiGatewayStack', {
+  env: {
+    account: process.env.CDK_DEFAULT_ACCOUNT,
+    region: region,
+  },
+  specFile: specFile, // Pass the spec file
+  restApiName: restApiName, // Pass the REST API name
+  deployStages: stagesToDeploy, // Pass the stages to deploy
+});
+
 
