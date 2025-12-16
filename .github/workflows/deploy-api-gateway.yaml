@@ -24,6 +24,10 @@ on:
 env:
   NODE_VERSION: '18'
 
+permissions:
+  id-token: write
+  contents: read
+
 jobs:
   deploy-api-gateway:
     name: deploy-api-gateway to ${{ inputs.environment }}
