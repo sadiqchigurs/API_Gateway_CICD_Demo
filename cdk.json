@@ -1,5 +1,5 @@
 {
-  "app": "npx ts-node --prefer-ts-exts bin/api_gateway_cicd_demo.ts",
+  "app": "node dist/bin/api_gateway_cicd_demo.js",
   "watch": {
     "include": [
       "**"
