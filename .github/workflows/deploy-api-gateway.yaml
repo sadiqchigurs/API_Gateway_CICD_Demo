@@ -44,25 +44,16 @@ jobs:
       - name: Set AWS Region
         id: set-region
         run: |
-          if [[ "${{ inputs.environment }}" == "develop" || ${{ inputs.environment }}" == "staging" || ${{ inputs.environment }}" == "nora-prod"]]; then
+          if [[ "${{ inputs.environment }}" == "develop" || ${{ inputs.environment }}" == "staging" || ${{ inputs.environment }}" == "prod"]]; then
             echo "aws_region=us-east-2" >> $GITHUB_OUTPUT
           fi
 
-      - name: Configure AWS credentials for develop environment
-        if: ${{ inputs.aws_account == '149216511563' }}
-        uses: aws-actions/configure-aws-credentials@v4
+      - name: 🔐 Configure AWS credentials
+        uses: aws-actions/configure-aws-credentials@v2
         with:
-          aws-access-key-id: ${{ secrets.MBL_MS_PREPRD_SKXDIGNPRD_AWS_ACCESS_KEY }}
-          aws-secret-access-key: ${{ secrets.MBL_MS_PREPRD_SKXDIGNPRD_AWS_ACCESS_SECRET }} 
-          aws-region: ${{ steps.set-region.outputs.aws_region }}
-
-      - name: Configure AWS credentials for staging and prod environment
-        if: ${{ inputs.aws_account == '252850564008' }}
-        uses: aws-actions/configure-aws-credentials@v4
-        with:
-          aws-access-key-id: ${{ secrets.MBL_MS_PRD_SKXDIG_AWS_ACCESS_KEY }}
-          aws-secret-access-key: ${{ secrets.MBL_MS_PRD_SKXDIG_AWS_ACCESS_SECRET }} 
-          aws-region: ${{ steps.set-region.outputs.aws_region }}
+          aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
+          aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+          aws-region: ${{ env.AWS_REGION }}
 
       - name: Install AWS CDK
         working-directory: ./aws-cdk-api-gateway
@@ -75,8 +66,7 @@ jobs:
       - name: Deploy API Gateway
         working-directory: ./aws-cdk-api-gateway
         run: |
-          echo "Deploying API Gateway to ${{ inputs.environment }}..."
-          
+          echo "Deploying API Gateway to ${{ inputs.environment }}..."          
           cdk deploy ApiGatewayStack \
             --context specFile=${{ inputs.spec_file }} \
             --context region=${{ steps.set-region.outputs.aws_region }} \
